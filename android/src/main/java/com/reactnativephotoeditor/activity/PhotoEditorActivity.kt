@@ -52,7 +52,13 @@ import ja.burhanrashid52.photoeditor.PhotoEditor.OnSaveListener
 import ja.burhanrashid52.photoeditor.shape.ShapeBuilder
 import ja.burhanrashid52.photoeditor.shape.ShapeType
 import java.io.File
-
+import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
+import android.content.ContentValues
+import android.graphics.BitmapFactory
+import android.provider.MediaStore
 
 open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, View.OnClickListener,
   PropertiesBSFragment.Properties, ShapeBSFragment.Properties, StickerListener,
@@ -77,6 +83,7 @@ open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, Vie
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     makeFullScreen()
+    WindowCompat.setDecorFitsSystemWindows(window, false)
     setContentView(R.layout.photo_editor_view)
     initViews()
 
@@ -204,6 +211,12 @@ open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, Vie
     mRvTools = findViewById(R.id.rvConstraintTools)
     mRvFilters = findViewById(R.id.rvFilterView)
     mRootView = findViewById(R.id.rootView)
+    mRootView?.let { view ->
+    ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+        val systemBarsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        v.updatePadding(bottom = systemBarsInsets.bottom)
+        insets
+    }
   }
 
   override fun onEditTextChangeListener(rootView: View, text: String, colorCode: Int) {
@@ -260,6 +273,36 @@ open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, Vie
     return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
   }
 
+  private fun saveImageToGallery(bitmapPath: String, displayName: String) {
+    val values = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES) // Saves in Pictures folder
+        put(MediaStore.Images.Media.IS_PENDING, 1) // For Android 10+
+    }
+
+    val contentResolver = applicationContext.contentResolver
+    val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+
+    try {
+        uri?.let {
+          contentResolver.openOutputStream(it)?.let { outStream ->
+          val bitmap = BitmapFactory.decodeFile(bitmapPath)
+          if (bitmap != null) {
+              bitmap.compress(Bitmap.CompressFormat.PNG, 100, outStream)
+          }
+        }
+        values.clear()
+        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+        contentResolver.update(uri, values, null, null)
+        // Image is now visible in gallery
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+
   private fun saveImage() {
     val fileName = System.currentTimeMillis().toString() + ".png"
     val hasStoragePermission = ContextCompat.checkSelfPermission(
@@ -277,6 +320,10 @@ open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, Vie
       mPhotoEditor!!.saveAsFile(file.absolutePath, object : OnSaveListener {
         override fun onSuccess(@NonNull imagePath: String) {
           hideLoading()
+
+          // Add image to gallery
+          saveImageToGallery(imagePath, fileName)
+
           val intent = Intent()
           intent.putExtra("path", imagePath)
           setResult(ResponseCode.RESULT_OK, intent)
