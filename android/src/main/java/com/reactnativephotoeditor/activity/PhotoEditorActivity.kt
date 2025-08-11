@@ -59,6 +59,12 @@ import androidx.core.view.updatePadding
 import android.content.ContentValues
 import android.graphics.BitmapFactory
 import android.provider.MediaStore
+import androidx.core.view.children
+
+import android.widget.Toast
+import ja.burhanrashid52.photoeditor.SaveSettings
+
+
 
 open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, View.OnClickListener,
   PropertiesBSFragment.Properties, ShapeBSFragment.Properties, StickerListener,
@@ -243,13 +249,42 @@ open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, Vie
     )
   }
 
+private fun isAnyOverlayOutOfBounds(): Boolean {
+ val view = mPhotoEditorView ?: return false
+    val parentWidth = view.width
+    val parentHeight = view.height
+
+    for (child in view.children) {  // Pseudocode: replace with real access to overlay views
+        val left = child.x
+        val top = child.y
+        val right = left + child.width * child.scaleX
+        val bottom = top + child.height * child.scaleY
+
+        if (left < 0 || top < 0 || right > parentWidth || bottom > parentHeight) {
+            return true
+        }
+    }
+    return false
+}
+
+
   override fun onStartViewChangeListener(viewType: ViewType) {
     Log.d(TAG, "onStartViewChangeListener() called with: viewType = [$viewType]")
   }
 
   override fun onStopViewChangeListener(viewType: ViewType) {
-    Log.d(TAG, "onStopViewChangeListener() called with: viewType = [$viewType]")
-  }
+    if (isAnyOverlayOutOfBounds()) {
+        mPhotoEditorView?.background = ContextCompat.getDrawable(this, R.drawable.red_border)
+        val btnSave: TextView = findViewById(R.id.btnSave)
+        btnSave.isEnabled = false
+        Toast.makeText(this, "Please keep all stickers and text inside the image bounds.", Toast.LENGTH_SHORT).show()
+    } else {
+        mPhotoEditorView?.background = null
+        val btnSave: TextView = findViewById(R.id.btnSave)
+        btnSave.isEnabled = true
+    }
+}
+
 
   @SuppressLint("NonConstantResourceId")
   override fun onClick(view: View) {
@@ -306,50 +341,39 @@ open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, Vie
   private fun saveImage() {
     val fileName = System.currentTimeMillis().toString() + ".png"
     val hasStoragePermission = ContextCompat.checkSelfPermission(
-      this,
-      Manifest.permission.WRITE_EXTERNAL_STORAGE
+        this,
+        Manifest.permission.WRITE_EXTERNAL_STORAGE
     ) == PackageManager.PERMISSION_GRANTED
     if (hasStoragePermission || isSdkHigherThan28()) {
-      showLoading("Saving...")
-      val path: File = Environment.getExternalStoragePublicDirectory(
-        Environment.DIRECTORY_PICTURES
-      )
-      val file = File(path, fileName)
-      path.mkdirs()
+        showLoading("Saving...")
+        val path: File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        val file = File(path, fileName)
+        path.mkdirs()
 
-      mPhotoEditor!!.saveAsFile(file.absolutePath, object : OnSaveListener {
-        override fun onSuccess(@NonNull imagePath: String) {
-          hideLoading()
+        val saveSettings = SaveSettings.Builder()
+            .setClearViewsEnabled(true)       // Clears overlays after save (optional as needed)
+            .setTransparencyEnabled(true)    // Transparent background support
+            .build()
 
-          // Add image to gallery
-          saveImageToGallery(imagePath, fileName)
-
-          val intent = Intent()
-          intent.putExtra("path", imagePath)
-          setResult(ResponseCode.RESULT_OK, intent)
-          finish()
-        }
-
-        override fun onFailure(@NonNull exception: Exception) {
-          hideLoading()
-          if (!hasStoragePermission) {
-            requestPer()
-          } else {
-            mPhotoEditorView?.let {
-              val snackBar = Snackbar.make(
-                it, R.string.save_error,
-                Snackbar.LENGTH_SHORT)
-              snackBar.setBackgroundTint(Color.WHITE)
-              snackBar.setActionTextColor(Color.BLACK)
-              snackBar.setAction("Ok", null).show()
+        mPhotoEditor!!.saveAsFile(file.absolutePath, saveSettings, object : OnSaveListener {
+            override fun onSuccess(imagePath: String) {
+                hideLoading()
+                // Add image to gallery (you can add your existing logic here)
+                saveImageToGallery(imagePath, fileName)
+                Toast.makeText(this@PhotoEditorActivity, "Image saved successfully", Toast.LENGTH_SHORT).show()
+                finish()
             }
-          }
-        }
-      })
+
+            override fun onFailure(exception: Exception) {
+                hideLoading()
+                Toast.makeText(this@PhotoEditorActivity, "Failed to save image", Toast.LENGTH_SHORT).show()
+            }
+        })
     } else {
-      requestPer()
+        requestPer()
     }
-  }
+}
+
 
   private fun requestPer() {
     requestPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
