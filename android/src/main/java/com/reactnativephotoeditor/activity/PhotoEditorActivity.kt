@@ -218,7 +218,7 @@ open class PhotoEditorActivity : AppCompatActivity(), OnPhotoEditorListener, Vie
         insets
     }
   }
-
+  }
   override fun onEditTextChangeListener(rootView: View, text: String, colorCode: Int) {
     val textEditorDialogFragment = TextEditorDialogFragment.show(this, text, colorCode)
     textEditorDialogFragment.setOnTextEditorListener { inputText: String?, newColorCode: Int ->
