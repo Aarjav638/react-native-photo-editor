@@ -361,6 +361,9 @@ private fun isAnyOverlayOutOfBounds(): Boolean {
                 // Add image to gallery (you can add your existing logic here)
                 saveImageToGallery(imagePath, fileName)
                 Toast.makeText(this@PhotoEditorActivity, "Image saved successfully", Toast.LENGTH_SHORT).show()
+                val intent = Intent()
+                intent.putExtra("path", imagePath)
+                setResult(ResponseCode.RESULT_OK, intent)
                 finish()
             }
 
