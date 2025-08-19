@@ -308,74 +308,69 @@ private fun isAnyOverlayOutOfBounds(): Boolean {
     return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
   }
 
-  private fun saveImageToGallery(bitmapPath: String, displayName: String) {
-    val values = ContentValues().apply {
-        put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
-        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES) // Saves in Pictures folder
-        put(MediaStore.Images.Media.IS_PENDING, 1) // For Android 10+
-    }
+//   private fun saveImageToGallery(bitmapPath: String, displayName: String) {
+//     val values = ContentValues().apply {
+//         put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+//         put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+//         put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES) // Saves in Pictures folder
+//         put(MediaStore.Images.Media.IS_PENDING, 1) // For Android 10+
+//     }
 
-    val contentResolver = applicationContext.contentResolver
-    val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+//     val contentResolver = applicationContext.contentResolver
+//     val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
 
-    try {
-        uri?.let {
-          contentResolver.openOutputStream(it)?.let { outStream ->
-          val bitmap = BitmapFactory.decodeFile(bitmapPath)
-          if (bitmap != null) {
-              bitmap.compress(Bitmap.CompressFormat.PNG, 100, outStream)
-          }
-        }
-        values.clear()
-        values.put(MediaStore.Images.Media.IS_PENDING, 0)
-        contentResolver.update(uri, values, null, null)
-        // Image is now visible in gallery
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-}
+//     try {
+//         uri?.let {
+//           contentResolver.openOutputStream(it)?.let { outStream ->
+//           val bitmap = BitmapFactory.decodeFile(bitmapPath)
+//           if (bitmap != null) {
+//               bitmap.compress(Bitmap.CompressFormat.PNG, 100, outStream)
+//           }
+//         }
+//         values.clear()
+//         values.put(MediaStore.Images.Media.IS_PENDING, 0)
+//         contentResolver.update(uri, values, null, null)
+//         // Image is now visible in gallery
+//         }
+//     } catch (e: Exception) {
+//         e.printStackTrace()
+//     }
+// }
 
 
-  private fun saveImage() {
+private fun saveImage() {
     val fileName = System.currentTimeMillis().toString() + ".png"
-    val hasStoragePermission = ContextCompat.checkSelfPermission(
-        this,
-        Manifest.permission.WRITE_EXTERNAL_STORAGE
-    ) == PackageManager.PERMISSION_GRANTED
-    if (hasStoragePermission || isSdkHigherThan28()) {
-        showLoading("Saving...")
-        val path: File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        val file = File(path, fileName)
-        path.mkdirs()
-
-        val saveSettings = SaveSettings.Builder()
-            .setClearViewsEnabled(true)       // Clears overlays after save (optional as needed)
-            .setTransparencyEnabled(true)    // Transparent background support
-            .build()
-
-        mPhotoEditor!!.saveAsFile(file.absolutePath, saveSettings, object : OnSaveListener {
-            override fun onSuccess(imagePath: String) {
-                hideLoading()
-                // Add image to gallery (you can add your existing logic here)
-                saveImageToGallery(imagePath, fileName)
-                Toast.makeText(this@PhotoEditorActivity, "Image saved successfully", Toast.LENGTH_SHORT).show()
-                val intent = Intent()
-                intent.putExtra("path", imagePath)
-                setResult(ResponseCode.RESULT_OK, intent)
-                finish()
-            }
-
-            override fun onFailure(exception: Exception) {
-                hideLoading()
-                Toast.makeText(this@PhotoEditorActivity, "Failed to save image", Toast.LENGTH_SHORT).show()
-            }
-        })
-    } else {
-        requestPer()
+    showLoading("Saving...")
+    
+    // Save to cache directory instead of gallery
+    val cacheDir = File(applicationContext.cacheDir, "edited_images")
+    if (!cacheDir.exists()) {
+        cacheDir.mkdirs()
     }
+    
+    val file = File(cacheDir, fileName)
+
+    val saveSettings = SaveSettings.Builder()
+        .setClearViewsEnabled(true)
+        .setTransparencyEnabled(true)
+        .build()
+
+    mPhotoEditor!!.saveAsFile(file.absolutePath, saveSettings, object : OnSaveListener {
+        override fun onSuccess(imagePath: String) {
+            hideLoading()
+            val intent = Intent()
+            intent.putExtra("path", imagePath)
+            setResult(ResponseCode.RESULT_OK, intent)
+            finish()
+        }
+
+        override fun onFailure(exception: Exception) {
+            hideLoading()
+            Toast.makeText(this@PhotoEditorActivity, "Failed to save image", Toast.LENGTH_SHORT).show()
+        }
+    })
 }
+
 
 
   private fun requestPer() {
